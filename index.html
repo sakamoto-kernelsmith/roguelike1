@@ -10,6 +10,7 @@
   <div id="game-container">
     <div id="header">
       <span id="game-title">Rogue Depths</span>
+      <div id="status-icons"></div>
       <span id="floor-info">Floor: 1</span>
     </div>
     <canvas id="game-canvas"></canvas>
@@ -17,11 +18,16 @@
       <div id="player-stats">
         <h3>Player</h3>
         <div class="stat-row"><span class="stat-label">HP</span><div class="bar-container"><div id="hp-bar" class="bar hp"></div></div><span id="hp-text">30/30</span></div>
+        <div class="stat-row"><span class="stat-label">満腹</span><div class="bar-container"><div id="hunger-bar" class="bar hunger"></div></div><span id="hunger-text">100/100</span></div>
         <div class="stat-row"><span class="stat-label">ATK</span><span id="atk-text">5</span></div>
         <div class="stat-row"><span class="stat-label">DEF</span><span id="def-text">2</span></div>
         <div class="stat-row"><span class="stat-label">LV</span><span id="lv-text">1</span></div>
         <div class="stat-row"><span class="stat-label">EXP</span><div class="bar-container"><div id="exp-bar" class="bar exp"></div></div><span id="exp-text">0/10</span></div>
+        <div class="stat-row"><span class="stat-label">Gold</span><span id="gold-text">0G</span></div>
       </div>
+      <div id="killstreak-display" style="display:none;color:#ff6633;font-size:11px;font-weight:bold;text-align:center;margin-top:4px;"></div>
+      <div id="quest-display" style="display:none;font-size:10px;margin-top:4px;padding:3px;border:1px solid #333;border-radius:2px;"></div>
+      <div id="skill-bar"></div>
       <div id="inventory">
         <h3>Inventory</h3>
         <ul id="inventory-list"></ul>
@@ -37,15 +43,40 @@
   </div>
   <div id="title-screen">
     <h1>Rogue Depths</h1>
-    <p class="subtitle">深淵へと続くダンジョンを探索せよ</p>
+    <p class="subtitle">黒曜の深み</p>
+    <div id="title-lore"></div>
+    <p class="title-tagline" id="title-tagline"></p>
     <button id="start-btn">ゲーム開始</button>
+    <button id="tutorial-btn">チュートリアル</button>
+    <button id="training-btn" style="display:none;">訓練場</button>
     <div class="controls-info">
       <p><strong>操作方法</strong></p>
       <p>移動: WASD / 矢印キー / テンキー</p>
       <p>待機: Space / テンキー5</p>
       <p>アイテム使用: 1-9</p>
-      <p>階段を降りる: Enter (階段の上で)</p>
+      <p>スキル: Q / E / R / F</p>
+      <p>調べる: X</p>
+      <p>階段を降りる: Enter</p>
+      <p>ヒント再表示: H</p>
     </div>
+  </div>
+  <div id="tutorial-overlay" style="display:none;">
+    <div id="tutorial-banner"></div>
+    <div id="tutorial-objective"></div>
+    <div id="tutorial-helper"></div>
+    <div id="tutorial-hint-box"></div>
+  </div>
+  <div id="training-select-screen" class="hidden">
+    <h2>訓練場</h2>
+    <div id="training-list"></div>
+    <button id="training-back-btn">戻る</button>
+  </div>
+  <div id="tutorial-complete-screen" class="hidden">
+    <h2 id="tutorial-complete-title"></h2>
+    <p id="tutorial-complete-msg"></p>
+    <button id="tutorial-next-btn" style="display:none;">次の章へ</button>
+    <button id="tutorial-title-btn">タイトルへ</button>
+    <button id="tutorial-start-game-btn">ゲーム開始</button>
   </div>
   <div id="gameover-screen" class="hidden">
     <h1>Game Over</h1>
@@ -53,13 +84,28 @@
     <p id="gameover-stats"></p>
     <button id="retry-btn">リトライ</button>
   </div>
+  <script src="js/lore.js"></script>
   <script src="js/constants.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/status.js"></script>
+  <script src="js/effects.js"></script>
+  <script src="js/sound.js"></script>
+  <script src="js/mutation.js"></script>
+  <script src="js/noise.js"></script>
   <script src="js/map.js"></script>
   <script src="js/fov.js"></script>
   <script src="js/entity.js"></script>
   <script src="js/item.js"></script>
+  <script src="js/trap.js"></script>
+  <script src="js/skills.js"></script>
   <script src="js/combat.js"></script>
+  <script src="js/roomevents.js"></script>
+  <script src="js/event-data.js"></script>
+  <script src="js/events.js"></script>
+  <script src="js/legacy.js"></script>
+  <script src="js/quest.js"></script>
+  <script src="js/tutorial-data.js"></script>
+  <script src="js/tutorial.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/input.js"></script>

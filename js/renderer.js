@@ -1,5 +1,5 @@
 // =============================================================================
-// Renderer - Canvas-based tile rendering
+// Renderer - Canvas-based tile rendering (with Mutations, Events, Prefixes)
 // =============================================================================
 
 const Renderer = {
@@ -9,6 +9,8 @@ const Renderer = {
   minimapCtx: null,
   tileSize: 20,
   font: null,
+  viewCols: 0,
+  viewRows: 0,
 
   init() {
     this.canvas = document.getElementById('game-canvas');
@@ -21,12 +23,11 @@ const Renderer = {
   },
 
   resize() {
-    const container = this.canvas.parentElement;
-    const headerH = 32;
-    const logH = 120;
-    const sidebarW = 180;
     const totalW = 960;
     const totalH = 680;
+    const sidebarW = 180;
+    const headerH = 32;
+    const logH = 120;
 
     const canvasW = totalW - sidebarW - 2;
     const canvasH = totalH - headerH - logH - 2;
@@ -53,7 +54,7 @@ const Renderer = {
   },
 
   render(state) {
-    const { map, player, enemies, items, visible, explored } = state;
+    const { map, player, enemies, items, visible, explored, traps, chests, merchant, roomEvents, mutation, poisonZones, rooms } = state;
     const ctx = this.ctx;
     const ts = this.tileSize;
 
@@ -70,54 +71,126 @@ const Renderer = {
       for (let vx = 0; vx < this.viewCols; vx++) {
         const mx = vx + offsetX;
         const my = vy + offsetY;
-
         if (!inBounds(mx, my)) continue;
 
         const key = `${mx},${my}`;
         const isVisible = visible.has(key);
         const isExplored = explored[my][mx];
-
         if (!isVisible && !isExplored) continue;
 
         const tile = map[my][mx];
         const [ch, fg, bg] = TILE_DISPLAY[tile] || TILE_DISPLAY[TILE.VOID];
-
         const px = vx * ts;
         const py = vy * ts;
 
-        // Background
-        if (isVisible) {
-          ctx.fillStyle = bg;
-        } else {
-          // Explored but not visible - darker
-          ctx.fillStyle = this.darken(bg, 0.4);
-        }
+        ctx.fillStyle = isVisible ? bg : this.darken(bg, 0.4);
         ctx.fillRect(px, py, ts, ts);
-
-        // Foreground character
-        if (isVisible) {
-          ctx.fillStyle = fg;
-        } else {
-          ctx.fillStyle = this.darken(fg, 0.4);
-        }
+        ctx.fillStyle = isVisible ? fg : this.darken(fg, 0.4);
         ctx.fillText(ch, px + ts / 2, py + 2);
+
+        // Poison fog overlay
+        if (isVisible && mutation === MUTATION.POISON_FOG && poisonZones && rooms) {
+          if (MutationManager.isInPoisonZone(mx, my, rooms, poisonZones)) {
+            ctx.fillStyle = 'rgba(64, 170, 64, 0.15)';
+            ctx.fillRect(px, py, ts, ts);
+          }
+        }
       }
     }
 
-    // Draw items (only visible ones)
+    // Tutorial highlights (pulsing target indicator + danger zones)
+    if (typeof TutorialManager !== 'undefined' && TutorialManager.active) {
+      const pulse = 0.25 + 0.2 * Math.sin(Date.now() / 300);
+      const highlights = TutorialManager.getHighlightPositions();
+      for (const pos of highlights) {
+        const sx = (pos.x - offsetX) * ts;
+        const sy = (pos.y - offsetY) * ts;
+        if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+        ctx.fillStyle = `rgba(0, 200, 255, ${pulse})`;
+        ctx.fillRect(sx, sy, ts, ts);
+      }
+      const dangerTiles = TutorialManager.getDangerZoneTiles();
+      for (const pos of dangerTiles) {
+        if (!visible.has(`${pos.x},${pos.y}`)) continue;
+        const sx = (pos.x - offsetX) * ts;
+        const sy = (pos.y - offsetY) * ts;
+        if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+        const dPulse = 0.15 + 0.1 * Math.sin(Date.now() / 400);
+        ctx.fillStyle = `rgba(220, 40, 40, ${dPulse})`;
+        ctx.fillRect(sx, sy, ts, ts);
+      }
+    }
+
+    // Draw traps
+    if (traps) {
+      for (const trap of traps) {
+        if (trap.triggered) continue;
+        if (!trap.detected) continue;
+        if (!visible.has(`${trap.x},${trap.y}`)) continue;
+        const sx = (trap.x - offsetX) * ts;
+        const sy = (trap.y - offsetY) * ts;
+        if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = trap.color;
+        ctx.fillText(trap.ch, sx + ts / 2, sy + 2);
+      }
+    }
+
+    // Draw room events
+    if (roomEvents) {
+      for (const evt of roomEvents) {
+        if (evt.used) continue;
+        if (!visible.has(`${evt.x},${evt.y}`)) continue;
+        const sx = (evt.x - offsetX) * ts;
+        const sy = (evt.y - offsetY) * ts;
+        if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = evt.color;
+        ctx.fillText(evt.ch, sx + ts / 2, sy + 2);
+      }
+    }
+
+    // Draw chests
+    if (chests) {
+      for (const chest of chests) {
+        if (!visible.has(`${chest.x},${chest.y}`)) continue;
+        const sx = (chest.x - offsetX) * ts;
+        const sy = (chest.y - offsetY) * ts;
+        if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = chest.color;
+        ctx.fillText(chest.ch, sx + ts / 2, sy + 2);
+      }
+    }
+
+    // Draw items
     for (const item of items) {
       if (!visible.has(`${item.x},${item.y}`)) continue;
       const sx = (item.x - offsetX) * ts;
       const sy = (item.y - offsetY) * ts;
       if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
-
       ctx.fillStyle = '#111';
       ctx.fillRect(sx, sy, ts, ts);
-      ctx.fillStyle = item.color;
+      ctx.fillStyle = RARITY_COLORS[item.rarity] || item.color;
       ctx.fillText(item.ch, sx + ts / 2, sy + 2);
     }
 
-    // Draw enemies (only visible ones)
+    // Draw merchant
+    if (merchant) {
+      if (visible.has(`${merchant.x},${merchant.y}`)) {
+        const sx = (merchant.x - offsetX) * ts;
+        const sy = (merchant.y - offsetY) * ts;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = merchant.color;
+        ctx.fillText(merchant.ch, sx + ts / 2, sy + 2);
+      }
+    }
+
+    // Draw enemies
     for (const enemy of enemies) {
       if (enemy.hp <= 0) continue;
       if (!visible.has(`${enemy.x},${enemy.y}`)) continue;
@@ -130,7 +203,7 @@ const Renderer = {
       ctx.fillStyle = enemy.color;
       ctx.fillText(enemy.ch, sx + ts / 2, sy + 2);
 
-      // HP bar for damaged enemies
+      // HP bar
       if (enemy.hp < enemy.maxHp) {
         const barW = ts - 2;
         const ratio = enemy.hp / enemy.maxHp;
@@ -138,6 +211,30 @@ const Renderer = {
         ctx.fillRect(sx + 1, sy + ts - 3, barW, 2);
         ctx.fillStyle = ratio > 0.5 ? '#0a0' : (ratio > 0.25 ? '#aa0' : '#a00');
         ctx.fillRect(sx + 1, sy + ts - 3, barW * ratio, 2);
+      }
+
+      // Status effect icons
+      const icons = StatusManager.getDisplayIcons(enemy);
+      if (icons.length > 0) {
+        ctx.font = '8px monospace';
+        for (let i = 0; i < icons.length; i++) {
+          ctx.fillStyle = icons[i].color;
+          ctx.fillText(icons[i].ch, sx + 4 + i * 8, sy - 2);
+        }
+        ctx.font = this.font;
+      }
+
+      // Prefix indicator
+      if (enemy.prefix) {
+        ctx.font = '7px monospace';
+        ctx.fillStyle = enemy.prefix.color;
+        ctx.fillText(enemy.prefix.name[0], sx + ts - 4, sy - 2);
+        ctx.font = this.font;
+      }
+
+      // Boss HP bar
+      if (enemy.isBoss) {
+        this.renderBossBar(ctx, enemy);
       }
     }
 
@@ -151,13 +248,50 @@ const Renderer = {
       ctx.font = `bold ${this.font}`;
       ctx.fillText(player.ch, sx + ts / 2, sy + 2);
       ctx.font = this.font;
+
+      const pIcons = StatusManager.getDisplayIcons(player);
+      if (pIcons.length > 0) {
+        ctx.font = '9px monospace';
+        for (let i = 0; i < pIcons.length; i++) {
+          ctx.fillStyle = pIcons[i].color;
+          ctx.fillText(pIcons[i].ch, sx + 4 + i * 10, sy - 4);
+        }
+        ctx.font = this.font;
+      }
     }
 
     this.renderMinimap(state);
   },
 
+  renderBossBar(ctx, boss) {
+    const barW = 300;
+    const barH = 12;
+    const bx = (this.canvas.width - barW) / 2;
+    const by = 8;
+    const ratio = Math.max(0, boss.hp / boss.maxHp);
+
+    ctx.fillStyle = '#000a';
+    ctx.fillRect(bx - 2, by - 2, barW + 4, barH + 20);
+
+    ctx.fillStyle = '#400';
+    ctx.fillRect(bx, by, barW, barH);
+    ctx.fillStyle = ratio > 0.5 ? '#c03030' : (ratio > 0.25 ? '#cc6600' : '#cc0000');
+    ctx.fillRect(bx, by, barW * ratio, barH);
+    ctx.strokeStyle = '#666';
+    ctx.strokeRect(bx, by, barW, barH);
+
+    // Phase indicators
+    const phase = boss.bossPhase || 1;
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${boss.name}  ${boss.hp}/${boss.maxHp}  Phase ${phase}`, bx + barW / 2, by + barH + 10);
+    ctx.font = this.font;
+    ctx.textBaseline = 'top';
+  },
+
   renderMinimap(state) {
-    const { map, player, explored, visible } = state;
+    const { map, player, explored, visible, enemies, merchant, roomEvents } = state;
     const ctx = this.minimapCtx;
     const cw = this.minimapCanvas.width;
     const ch = this.minimapCanvas.height;
@@ -172,7 +306,6 @@ const Renderer = {
         if (!explored[y][x]) continue;
         const tile = map[y][x];
         if (tile === TILE.WALL || tile === TILE.VOID) continue;
-
         const isVis = visible.has(`${x},${y}`);
         if (tile === TILE.STAIRS_DOWN) {
           ctx.fillStyle = isVis ? '#00ccff' : '#004466';
@@ -183,13 +316,35 @@ const Renderer = {
       }
     }
 
-    // Player dot
+    // Enemy dots
+    for (const enemy of enemies) {
+      if (enemy.hp <= 0 || !visible.has(`${enemy.x},${enemy.y}`)) continue;
+      ctx.fillStyle = enemy.isBoss ? '#ff4444' : (enemy.prefix ? enemy.prefix.color : '#e04040');
+      ctx.fillRect(enemy.x * tileW, enemy.y * tileH, tileW + 1, tileH + 1);
+    }
+
+    // Merchant
+    if (merchant && visible.has(`${merchant.x},${merchant.y}`)) {
+      ctx.fillStyle = '#ffdd44';
+      ctx.fillRect(merchant.x * tileW, merchant.y * tileH, tileW + 1, tileH + 1);
+    }
+
+    // Room events
+    if (roomEvents) {
+      for (const evt of roomEvents) {
+        if (evt.used) continue;
+        if (!visible.has(`${evt.x},${evt.y}`)) continue;
+        ctx.fillStyle = evt.color;
+        ctx.fillRect(evt.x * tileW, evt.y * tileH, tileW + 1, tileH + 1);
+      }
+    }
+
+    // Player
     ctx.fillStyle = '#fff';
     ctx.fillRect(player.x * tileW - 0.5, player.y * tileH - 0.5, tileW + 1, tileH + 1);
   },
 
   darken(color, factor) {
-    // Parse hex color and darken
     if (color.startsWith('#')) {
       const hex = color.slice(1);
       let r, g, b;
