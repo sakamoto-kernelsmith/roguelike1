@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rogue Depths</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game-container">
+    <div id="header">
+      <span id="game-title">Rogue Depths</span>
+      <span id="floor-info">Floor: 1</span>
+    </div>
+    <canvas id="game-canvas"></canvas>
+    <div id="sidebar">
+      <div id="player-stats">
+        <h3>Player</h3>
+        <div class="stat-row"><span class="stat-label">HP</span><div class="bar-container"><div id="hp-bar" class="bar hp"></div></div><span id="hp-text">30/30</span></div>
+        <div class="stat-row"><span class="stat-label">ATK</span><span id="atk-text">5</span></div>
+        <div class="stat-row"><span class="stat-label">DEF</span><span id="def-text">2</span></div>
+        <div class="stat-row"><span class="stat-label">LV</span><span id="lv-text">1</span></div>
+        <div class="stat-row"><span class="stat-label">EXP</span><div class="bar-container"><div id="exp-bar" class="bar exp"></div></div><span id="exp-text">0/10</span></div>
+      </div>
+      <div id="inventory">
+        <h3>Inventory</h3>
+        <ul id="inventory-list"></ul>
+      </div>
+      <div id="minimap-container">
+        <h3>Map</h3>
+        <canvas id="minimap-canvas" width="140" height="140"></canvas>
+      </div>
+    </div>
+    <div id="message-log">
+      <div id="messages"></div>
+    </div>
+  </div>
+  <div id="title-screen">
+    <h1>Rogue Depths</h1>
+    <p class="subtitle">深淵へと続くダンジョンを探索せよ</p>
+    <button id="start-btn">ゲーム開始</button>
+    <div class="controls-info">
+      <p><strong>操作方法</strong></p>
+      <p>移動: WASD / 矢印キー / テンキー</p>
+      <p>待機: Space / テンキー5</p>
+      <p>アイテム使用: 1-9</p>
+      <p>階段を降りる: Enter (階段の上で)</p>
+    </div>
+  </div>
+  <div id="gameover-screen" class="hidden">
+    <h1>Game Over</h1>
+    <p id="gameover-message"></p>
+    <p id="gameover-stats"></p>
+    <button id="retry-btn">リトライ</button>
+  </div>
+  <script src="js/constants.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/fov.js"></script>
+  <script src="js/entity.js"></script>
+  <script src="js/item.js"></script>
+  <script src="js/combat.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
