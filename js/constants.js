@@ -148,7 +148,7 @@ const TRAP_TYPE = {
 };
 
 const TRAP_DEFS = [
-  { type: TRAP_TYPE.SPIKE,      name: 'スパイクトラップ', ch: '^', color: '#aa6633', damage: 8,  alwaysVisible: true,  weight: 30 },
+  { type: TRAP_TYPE.SPIKE,      name: 'スパイクトラップ', ch: '^', color: '#aa6633', damage: 8,  alwaysVisible: false, weight: 30 },
   { type: TRAP_TYPE.POISON_GAS, name: '毒ガストラップ',   ch: '^', color: '#40aa40', damage: 0,  alwaysVisible: false, weight: 25 },
   { type: TRAP_TYPE.TELEPORT,   name: 'テレポートトラップ', ch: '^', color: '#6060dd', damage: 0,  alwaysVisible: false, weight: 20 },
   { type: TRAP_TYPE.PIT,        name: '落とし穴',         ch: '^', color: '#663300', damage: 15, alwaysVisible: false, weight: 15 },
@@ -165,22 +165,23 @@ const SKILL_DEFS = [
 
 // --- Boss Definitions ---
 const BOSS_DEFS = {
-  5:  { name: 'ミノタウロス', ch: 'M', color: '#ff6633', hp: 80,  atk: 12, def: 6, exp: 100, gold: 80,  bossType: 'minotaur', roomSize: 11 },
-  10: { name: 'リッチ',       ch: 'R', color: '#cc44ff', hp: 140, atk: 18, def: 10, exp: 300, gold: 200, bossType: 'lich',     roomSize: 13 },
+  5:  { name: 'ミノタウロス', ch: 'M', color: '#ff6633', hp: 80,  atk: 12, def: 6, exp: 100, gold: 80,  bossType: 'minotaur', roomSize: 11, pursuit: 1.0, pursuitMult: 0.7, chaseLimit: 0 },
+  10: { name: 'リッチ',       ch: 'R', color: '#cc44ff', hp: 140, atk: 18, def: 10, exp: 300, gold: 200, bossType: 'lich',     roomSize: 13, pursuit: 0.8, pursuitMult: 0.6, chaseLimit: 0 },
 };
 
 // --- Enemy Definitions (with abilities, gold, lore) ---
 const ENEMY_DEFS = [
-  { id: 'slime',     name: 'スライム',     ch: 's', color: '#40e040', hp: 8,  atk: 2,  def: 0, exp: 3,  minFloor: 1, gold: 3,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    role: ENEMY_ROLE.FRONTLINE },
-  { id: 'bat',       name: 'コウモリ',     ch: 'b', color: '#a060c0', hp: 6,  atk: 3,  def: 0, exp: 3,  minFloor: 1, gold: 2,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    evasion: 0.3, role: ENEMY_ROLE.SUPPORT },
-  { id: 'rat',       name: 'ネズミ',       ch: 'r', color: '#c09060', hp: 5,  atk: 2,  def: 1, exp: 2,  minFloor: 1, gold: 2,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    role: ENEMY_ROLE.DEBUFF },
-  { id: 'goblin',    name: 'ゴブリン',     ch: 'g', color: '#60c040', hp: 12, atk: 4,  def: 1, exp: 6,  minFloor: 2, gold: 5,  family: 'fallen_delver', tier: 'common',  faction: 'fallen_delvers', role: ENEMY_ROLE.FRONTLINE },
-  { id: 'skeleton',  name: 'スケルトン',   ch: 'S', color: '#cccccc', hp: 15, atk: 5,  def: 2, exp: 8,  minFloor: 3, gold: 8,  family: 'sealed_dead',   tier: 'common',  faction: 'sealed_dead',   role: ENEMY_ROLE.FRONTLINE },
-  { id: 'orc',       name: 'オーク',       ch: 'O', color: '#408040', hp: 20, atk: 6,  def: 3, exp: 12, minFloor: 4, gold: 12, family: 'deep_denizen',  tier: 'elite',   faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE },
-  { id: 'lizardman', name: 'リザードマン', ch: 'l', color: '#40a060', hp: 22, atk: 7,  def: 3, exp: 14, minFloor: 5, gold: 15, family: 'deep_denizen',  tier: 'elite',   faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE },
-  { id: 'ghost',     name: 'ゴースト',     ch: 'G', color: '#8888cc', hp: 18, atk: 8,  def: 1, exp: 15, minFloor: 5, gold: 15, family: 'bound_spirit',  tier: 'elite',   faction: 'bound_spirits', passWalls: true, role: ENEMY_ROLE.BACKLINE },
-  { id: 'troll',     name: 'トロル',       ch: 'T', color: '#609030', hp: 36, atk: 10, def: 6, exp: 22, minFloor: 7, gold: 22, family: 'deep_denizen',  tier: 'greater', faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE },
-  { id: 'dragon',    name: 'ドラゴン',     ch: 'D', color: '#e04040', hp: 60, atk: 15, def: 9, exp: 55, minFloor: 9, gold: 55, family: 'deep_denizen',  tier: 'greater', faction: 'deep_denizens', breath: true, role: ENEMY_ROLE.BACKLINE },
+  // pursuit: opportunity attack chance, pursuitMult: opp. attack damage mult, chaseLimit: give-up distance (0 = never gives up)
+  { id: 'slime',     name: 'スライム',     ch: 's', color: '#40e040', hp: 8,  atk: 2,  def: 0, exp: 3,  minFloor: 1, gold: 3,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    role: ENEMY_ROLE.FRONTLINE, pursuit: 0, pursuitMult: 0, chaseLimit: 6 },
+  { id: 'bat',       name: 'インプ',       ch: 'b', color: '#a060c0', hp: 6,  atk: 3,  def: 0, exp: 3,  minFloor: 1, gold: 2,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    evasion: 0.3, role: ENEMY_ROLE.SUPPORT, pursuit: 0, pursuitMult: 0, chaseLimit: 8 },
+  { id: 'rat',       name: 'コボルド',     ch: 'r', color: '#c09060', hp: 5,  atk: 2,  def: 1, exp: 2,  minFloor: 1, gold: 2,  family: 'tainted_beast', tier: 'lesser',  faction: 'deep_taint',    role: ENEMY_ROLE.DEBUFF, pursuit: 0, pursuitMult: 0, chaseLimit: 5 },
+  { id: 'goblin',    name: 'ゴブリン',     ch: 'g', color: '#60c040', hp: 12, atk: 4,  def: 1, exp: 6,  minFloor: 2, gold: 5,  family: 'fallen_delver', tier: 'common',  faction: 'fallen_delvers', role: ENEMY_ROLE.FRONTLINE, pursuit: 0.3, pursuitMult: 0.4, chaseLimit: 8 },
+  { id: 'skeleton',  name: 'スケルトン',   ch: 'S', color: '#cccccc', hp: 15, atk: 5,  def: 2, exp: 8,  minFloor: 3, gold: 8,  family: 'sealed_dead',   tier: 'common',  faction: 'sealed_dead',   role: ENEMY_ROLE.FRONTLINE, pursuit: 0.6, pursuitMult: 0.5, chaseLimit: 10 },
+  { id: 'orc',       name: 'オーク',       ch: 'O', color: '#408040', hp: 20, atk: 6,  def: 3, exp: 12, minFloor: 4, gold: 12, family: 'deep_denizen',  tier: 'elite',   faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE, pursuit: 0.7, pursuitMult: 0.5, chaseLimit: 12 },
+  { id: 'lizardman', name: 'リザードマン', ch: 'l', color: '#40a060', hp: 22, atk: 7,  def: 3, exp: 14, minFloor: 5, gold: 15, family: 'deep_denizen',  tier: 'elite',   faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE, pursuit: 0.8, pursuitMult: 0.5, chaseLimit: 14 },
+  { id: 'ghost',     name: 'ゴースト',     ch: 'G', color: '#8888cc', hp: 18, atk: 8,  def: 1, exp: 15, minFloor: 5, gold: 15, family: 'bound_spirit',  tier: 'elite',   faction: 'bound_spirits', passWalls: true, role: ENEMY_ROLE.BACKLINE, pursuit: 0.5, pursuitMult: 0.5, chaseLimit: 20 },
+  { id: 'troll',     name: 'トロル',       ch: 'T', color: '#609030', hp: 36, atk: 10, def: 6, exp: 22, minFloor: 7, gold: 22, family: 'deep_denizen',  tier: 'greater', faction: 'deep_denizens', role: ENEMY_ROLE.FRONTLINE, pursuit: 0.5, pursuitMult: 0.5, chaseLimit: 7 },
+  { id: 'dragon',    name: 'ドラゴン',     ch: 'D', color: '#e04040', hp: 60, atk: 15, def: 9, exp: 55, minFloor: 9, gold: 55, family: 'deep_denizen',  tier: 'greater', faction: 'deep_denizens', breath: true, role: ENEMY_ROLE.BACKLINE, pursuit: 0.9, pursuitMult: 0.7, chaseLimit: 0 },
 ];
 
 // --- Item Types ---
@@ -192,6 +193,8 @@ const ITEM_TYPE = {
   SCROLL_MAP: 'scroll_map',
   FOOD: 'food',
   POISON_SCROLL: 'poison_scroll',
+  MAGIC_STONE: 'magic_stone',
+  MAGIC_CRYSTAL: 'magic_crystal',
 };
 
 // --- Item Definitions (with rarity & loreKey) ---
@@ -223,6 +226,9 @@ const ITEM_DEFS = [
   { type: ITEM_TYPE.FOOD, name: 'パン',       ch: '%', color: '#cc9944', weight: 30, hunger: 30,  minFloor: 1, rarity: RARITY.COMMON, price: 15, loreKey: 'food_bread' },
   { type: ITEM_TYPE.FOOD, name: '肉',         ch: '%', color: '#dd6644', weight: 15, hunger: 50,  minFloor: 2, rarity: RARITY.COMMON, price: 25, loreKey: 'food_meat' },
   { type: ITEM_TYPE.FOOD, name: '豪華な食事', ch: '%', color: '#ffcc44', weight: 5,  hunger: 100, minFloor: 5, rarity: RARITY.UNCOMMON, price: 50, loreKey: 'food_feast' },
+  // Magic
+  { type: ITEM_TYPE.MAGIC_STONE,   name: '魔法石',     ch: '*', color: '#ff9933', weight: 20, value: 1, minFloor: 1, rarity: RARITY.COMMON,   price: 10 },
+  { type: ITEM_TYPE.MAGIC_CRYSTAL, name: '魔法の結晶', ch: '*', color: '#6699ff', weight: 4,  value: 0, minFloor: 3, rarity: RARITY.UNCOMMON,  price: 80 },
 ];
 
 // --- Rarity drop rates by floor depth ---
@@ -244,6 +250,16 @@ function getRarityForFloor(floor) {
     return RARITY.COMMON;
   }
 }
+
+// Magic level table
+const MAGIC_LEVEL_TABLE = [
+  { level: 1, name: 'ファイア',  range: 5,  damage: 10, cost: 1 },
+  { level: 2, name: 'ファイア+', range: 7,  damage: 18, cost: 2 },
+  { level: 3, name: 'ファイラ',  range: 9,  damage: 28, cost: 3 },
+  { level: 4, name: 'ファイラ+', range: 11, damage: 40, cost: 4 },
+  { level: 5, name: 'ファイガ',  range: 14, damage: 55, cost: 5 },
+];
+const MAGIC_MAX_LEVEL = 5;
 
 // Player level-up table
 const LEVEL_TABLE = [

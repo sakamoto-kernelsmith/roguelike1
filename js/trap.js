@@ -44,6 +44,7 @@ const TrapManager = {
     const { messages, enemies, map, rooms } = state;
 
     Sound.play('trap');
+    DanmakuManager.onTrap(trap.type);
 
     switch (trap.type) {
       case TRAP_TYPE.SPIKE:
@@ -103,15 +104,4 @@ const TrapManager = {
     return true;
   },
 
-  // Detect traps in FOV (chance-based)
-  detectTraps(traps, visible) {
-    for (const trap of traps) {
-      if (trap.detected || trap.triggered) continue;
-      if (visible.has(`${trap.x},${trap.y}`)) {
-        if (Math.random() < 0.15) {
-          trap.detected = true;
-        }
-      }
-    }
-  },
 };

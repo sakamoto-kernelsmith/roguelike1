@@ -6,10 +6,8 @@ const SkillManager = {
   skills: null,
 
   init() {
-    this.skills = SKILL_DEFS.map(def => ({
-      ...def,
-      currentCd: 0,
-    }));
+    // Skills disabled for now
+    this.skills = [];
   },
 
   getSkill(id) {
@@ -78,7 +76,18 @@ const SkillManager = {
     Sound.play('hit');
     const leveledUp = addExp(player, enemy.exp);
     if (leveledUp) {
-      addMessage(messages, `レベルアップ！ Lv.${player.level}！HPが全回復した。`, 'level');
+      addMessage(messages, `--- レベルアップ！ Lv.${player.level} ---`, 'level');
+      const flavorLines = LEVELUP_LORE[player.level];
+      if (flavorLines) {
+        addMessage(messages, randPick(flavorLines), 'level');
+      }
+      const statKey = randPick(['atk', 'def', 'hp']);
+      const statLine = LEVELUP_LORE.statLines[statKey];
+      if (statLine) {
+        addMessage(messages, randPick(statLine), 'info');
+      }
+      addMessage(messages, 'HPが全回復した。', 'info');
+      DanmakuManager.onLevelUp(player.level);
       Effects.spawnParticles(player.x, player.y, '#c080e0', 15);
       Sound.play('levelup');
     }

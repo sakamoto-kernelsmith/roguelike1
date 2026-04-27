@@ -98,6 +98,7 @@ function processPlayerAttack(player, enemy, messages) {
   if (result.missed) {
     addMessage(messages, `${enemy.name}は攻撃をかわした！`, 'combat');
     Sound.play('miss');
+    DanmakuManager.onPlayerAttack(result, enemy);
     return result;
   }
 
@@ -108,6 +109,7 @@ function processPlayerAttack(player, enemy, messages) {
 
   // Effects
   Effects.spawnDamageNumber(enemy.x, enemy.y, result.damage, false, result.isCrit);
+  DanmakuManager.onPlayerAttack(result, enemy);
   if (result.isCrit) {
     Effects.screenShake(2);
     Sound.play('crit');
@@ -133,6 +135,7 @@ function processPlayerAttack(player, enemy, messages) {
 
   if (result.killed) {
     addMessage(messages, `${enemy.name}を倒した！ (EXP+${enemy.exp})`, 'combat');
+    DanmakuManager.onEnemyKilled(enemy, player);
     player.killCount++;
     player.gold += (enemy.gold || 0);
     if (enemy.gold) addMessage(messages, `${enemy.gold}Gを手に入れた。`, 'item');
@@ -159,7 +162,21 @@ function processPlayerAttack(player, enemy, messages) {
 
     const leveledUp = addExp(player, enemy.exp);
     if (leveledUp) {
-      addMessage(messages, `レベルアップ！ Lv.${player.level} になった！ HPが全回復した。`, 'level');
+      addMessage(messages, `--- レベルアップ！ Lv.${player.level} ---`, 'level');
+      // Flavor line
+      const flavorLines = LEVELUP_LORE[player.level];
+      if (flavorLines) {
+        addMessage(messages, randPick(flavorLines), 'level');
+      }
+      // Stat line
+      const statKeys = ['atk', 'def', 'hp'];
+      const statKey = randPick(statKeys);
+      const statLine = LEVELUP_LORE.statLines[statKey];
+      if (statLine) {
+        addMessage(messages, randPick(statLine), 'info');
+      }
+      addMessage(messages, 'HPが全回復した。', 'info');
+      DanmakuManager.onLevelUp(player.level);
       Effects.spawnParticles(player.x, player.y, '#c080e0', 15);
       Sound.play('levelup');
       // Tutorial level-up event
@@ -177,14 +194,34 @@ function processPlayerAttack(player, enemy, messages) {
 function processEnemyAttack(result, messages) {
   if (result.missed) {
     addMessage(messages, `${result.attacker}の攻撃をかわした！`, 'combat');
+    DanmakuManager.onEvade();
     Sound.play('miss');
     return;
   }
   if (result.isBreath || result.isCharge) return; // Already handled
 
-  let msg = `${result.attacker}から${result.damage}のダメージを受けた。`;
+  // Use enemy-specific attack line if available
+  let attackLine = '';
+  if (typeof Game !== 'undefined' && Game.state) {
+    const attackerEnemy = Game.state.enemies.find(e => e.name === result.attacker && e.hp > 0);
+    if (attackerEnemy) {
+      const lore = ENEMY_LORE[attackerEnemy.bossType || attackerEnemy.id];
+      if (lore && lore.attackLines) {
+        attackLine = randPick(lore.attackLines);
+      }
+    }
+  }
+  let msg = attackLine
+    ? `${attackLine} ${result.damage}のダメージ！`
+    : `${result.attacker}から${result.damage}のダメージを受けた。`;
   if (result.isCrit) msg = '痛恨の一撃！ ' + msg;
   addMessage(messages, msg, 'combat');
+
+  // Danmaku: find the attacking enemy for specific comments
+  if (typeof Game !== 'undefined' && Game.state) {
+    const attackerEnemy = Game.state.enemies.find(e => e.name === result.attacker && e.hp > 0);
+    DanmakuManager.onPlayerDamaged(result, attackerEnemy);
+  }
 
   if (typeof Game !== 'undefined' && Game.state) {
     const player = Game.state.player;

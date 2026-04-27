@@ -36,6 +36,7 @@ const UI = {
       hungerText: document.getElementById('hunger-text'),
       skillBar: document.getElementById('skill-bar'),
       statusIcons: document.getElementById('status-icons'),
+      magicText: document.getElementById('magic-text'),
     };
   },
 
@@ -74,6 +75,12 @@ const UI = {
     // Gold
     if (this.elements.goldText) {
       this.elements.goldText.textContent = `${player.gold || 0}G`;
+    }
+
+    // Magic
+    if (this.elements.magicText) {
+      const magicDef = MAGIC_LEVEL_TABLE[player.magicLevel - 1];
+      this.elements.magicText.textContent = `Lv.${player.magicLevel} [${magicDef.name}] 石:${player.magicStones}`;
     }
 
     // Hunger
@@ -219,7 +226,7 @@ const UI = {
     merchant.shopItems.forEach((si, i) => {
       addMessage(messages, `[${i + 1}] ${si.item.name} - ${si.price}G`, 'item');
     });
-    addMessage(messages, '番号キーで購入、他のキーで退出', 'system');
+    addMessage(messages, '番号キーで購入 / Qで所持品を売却 / 他のキーで退出', 'system');
   },
 
   showTitle() {

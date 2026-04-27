@@ -27,6 +27,8 @@ function createPlayer(x, y) {
     lastDy: 1,
     killStreak: 0,
     lastKillTurn: -1,
+    magicLevel: 1,
+    magicStones: 0,
   };
 }
 
@@ -67,6 +69,7 @@ function tickHunger(player, messages, hungerDecayMult) {
     }
   } else if (player.hunger <= 20 && player.turnCount % 10 === 0) {
     addMessage(messages, 'お腹が減ってきた...', 'system');
+    DanmakuManager.onHunger();
   }
 }
 
@@ -241,6 +244,20 @@ function updateEnemy(enemy, player, map, enemies, visible, state) {
     enemy.lastSeenY = player.y;
   }
 
+  // Give up chase if too far and out of sight
+  if (enemy.state === 'chase' && !enemy.isBoss) {
+    const limit = enemy.chaseLimit || 0;
+    if (limit > 0 && !canSee && distToPlayer > limit) {
+      enemy.state = 'idle';
+      if (visible.has(`${enemy.x},${enemy.y}`)) {
+        // Player can still see the enemy giving up
+        addMessage(state.messages, `${enemy.name}は追うのをやめたようだ。`, 'info');
+      }
+      StatusManager.tick(enemy, state.messages);
+      return null;
+    }
+  }
+
   // Boss special abilities (with phase system)
   if (enemy.isBoss) {
     const result = updateBossAI(enemy, player, map, enemies, visible, state);
@@ -378,6 +395,7 @@ function tryBreathAttack(enemy, player, map, state) {
 
   addMessage(state.messages, `${enemy.name}がブレスを吐いた！`, 'important');
   Effects.screenShake(3);
+  DanmakuManager.onPlayerDamaged({ isCrit: false, damage: enemy.atk }, enemy);
 
   let hitPlayer = false;
   for (let i = 1; i <= 3; i++) {
@@ -410,6 +428,7 @@ function updateBossAI(enemy, player, map, enemies, visible, state) {
 
   // Announce phase change with lore
   if (enemy.bossPhase !== oldPhase) {
+    DanmakuManager.onBossPhase(enemy.bossType, enemy.bossPhase);
     const bossLore = typeof BOSS_LORE !== 'undefined' && enemy.bossType ? BOSS_LORE[enemy.bossType] : null;
     if (bossLore && bossLore.phase && bossLore.phase.length > 0) {
       for (const line of bossLore.phase) {

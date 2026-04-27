@@ -47,19 +47,21 @@ const QuestManager = {
     return quest;
   },
 
-  // Check quest progress
+  // Check quest progress - returns true only once when conditions are first met
   checkProgress(state) {
     if (!this.activeQuest || this.activeQuest.completed) return false;
+    if (this.activeQuest.notified) return false;
     const quest = this.activeQuest;
 
+    let met = false;
     switch (quest.type) {
       case 'fetch_item':
-        // Check if player has the item
-        return state.player.inventory.some(i => i.type === quest.targetType);
+        met = state.player.inventory.some(i => i.type === quest.targetType);
+        break;
       case 'kill_mimic':
-        return quest.killCount >= quest.killRequired;
+        met = quest.killCount >= quest.killRequired;
+        break;
       case 'explore': {
-        // Count explored rooms
         let explored = 0;
         if (state.rooms && state.explored) {
           for (const room of state.rooms) {
@@ -69,10 +71,14 @@ const QuestManager = {
           }
         }
         quest.roomsExplored = explored;
-        return explored >= quest.roomsRequired;
+        met = explored >= quest.roomsRequired;
+        break;
       }
     }
-    return false;
+    if (met) {
+      quest.notified = true;
+    }
+    return met;
   },
 
   // Notify kill (for kill quests)

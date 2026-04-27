@@ -88,13 +88,27 @@ function createChest(x, y, floor) {
   };
 }
 
+function _chestFloorTier(floor) {
+  if (floor <= 3) return 'shallow';
+  if (floor <= 7) return 'mid';
+  return 'deep';
+}
+
 function openChest(chest, player, state) {
   const { messages, enemies } = state;
   Sound.play('chest');
+  const tier = _chestFloorTier(chest.floor);
+
+  // Discovery flavor
+  const discoverLines = CHEST_LORE.discover[tier];
+  if (discoverLines) {
+    addMessage(messages, randPick(discoverLines), 'info');
+  }
 
   // 20% mimic chance
   if (Math.random() < 0.2) {
-    addMessage(messages, 'ミミックだ！宝箱が襲いかかってきた！', 'important');
+    DanmakuManager.onChest(true);
+    addMessage(messages, randPick(CHEST_LORE.mimic), 'important');
     const mimic = createEnemy(chest.x, chest.y, {
       name: 'ミミック', ch: 'C', color: '#dd8800',
       hp: 20 + chest.floor * 3, atk: 6 + chest.floor, def: 3 + Math.floor(chest.floor / 2),
@@ -109,7 +123,8 @@ function openChest(chest, player, state) {
   }
 
   // Good loot
-  addMessage(messages, '宝箱を開けた！', 'item');
+  DanmakuManager.onChest(false);
+  addMessage(messages, randPick(CHEST_LORE.open), 'item');
   Effects.spawnParticles(chest.x, chest.y, '#ffcc44', 10);
 
   // Generate a nice item (higher rarity)
@@ -144,6 +159,16 @@ function pickupItem(player, items, messages) {
 
   const item = items[idx];
 
+  // Magic stones stack outside inventory
+  if (item.type === ITEM_TYPE.MAGIC_STONE) {
+    items.splice(idx, 1);
+    const count = item.value || 1;
+    player.magicStones += count;
+    addMessage(messages, `魔法石を${count}個拾った。(計${player.magicStones}個)`, 'item');
+    Sound.play('pickup');
+    return;
+  }
+
   if (player.inventory.length >= MAX_INVENTORY) {
     addMessage(messages, '持ち物がいっぱいだ！', 'item');
     return;
@@ -152,6 +177,7 @@ function pickupItem(player, items, messages) {
   items.splice(idx, 1);
   player.inventory.push(item);
   addMessage(messages, `${item.name}を拾った。`, 'item');
+  DanmakuManager.onPickupItem(item);
   Sound.play('pickup');
 }
 
@@ -182,6 +208,7 @@ function useItem(player, slotIndex, messages) {
         addMessage(messages, `${item.name}を装備した。(ATK+${item.atk})`, 'item');
       }
       if (item.special) addMessage(messages, `特殊効果: ${getSpecialDesc(item.special)}`, 'item');
+      DanmakuManager.onEquip(item);
       return true;
     }
     case ITEM_TYPE.ARMOR: {
@@ -195,6 +222,7 @@ function useItem(player, slotIndex, messages) {
         addMessage(messages, `${item.name}を装備した。(DEF+${item.def})`, 'item');
       }
       if (item.special) addMessage(messages, `特殊効果: ${getSpecialDesc(item.special)}`, 'item');
+      DanmakuManager.onEquip(item);
       return true;
     }
     case ITEM_TYPE.SCROLL_MAP: {
@@ -211,7 +239,20 @@ function useItem(player, slotIndex, messages) {
       const restored = Math.min(item.hunger, HUNGER_MAX - player.hunger);
       player.hunger = Math.min(HUNGER_MAX, player.hunger + item.hunger);
       player.inventory.splice(slotIndex, 1);
-      addMessage(messages, `${item.name}を食べた。満腹度が${restored}回復した。`, 'heal');
+      addMessage(messages, `${item.name}を食べた。満腹度が${Math.floor(restored)}回復した。`, 'heal');
+      return true;
+    }
+    case ITEM_TYPE.MAGIC_CRYSTAL: {
+      if (player.magicLevel >= MAGIC_MAX_LEVEL) {
+        addMessage(messages, '魔法はすでに最大レベルだ。', 'system');
+        return false;
+      }
+      player.magicLevel++;
+      player.inventory.splice(slotIndex, 1);
+      const magicDef = MAGIC_LEVEL_TABLE[player.magicLevel - 1];
+      addMessage(messages, `魔法の結晶を使った！魔法が Lv.${player.magicLevel} [${magicDef.name}] に強化された！`, 'level');
+      Effects.flashScreen('#6699ff80');
+      Sound.play('levelup');
       return true;
     }
   }

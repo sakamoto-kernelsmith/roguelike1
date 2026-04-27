@@ -12,6 +12,7 @@ const Game = {
     Effects.init();
     Sound.init();
     SkillManager.init();
+    DanmakuManager.init();
     UI.showTitle();
 
     document.getElementById('start-btn').addEventListener('click', () => { Sound.resume(); this.start(); });
@@ -46,10 +47,12 @@ const Game = {
 
   start() {
     Sound.stopBGM();
+    Music.start();
     SkillManager.init();
     QuestManager.reset();
     TutorialManager.reset();
     EventManager.reset();
+    DanmakuManager.init();
 
     this.state = {
       floor: 1,
@@ -83,13 +86,12 @@ const Game = {
     for (const line of WORLD_INTRO.openingLog) {
       addMessage(this.state.messages, line, 'important');
     }
-    addMessage(this.state.messages, 'スキル: [Q]パワースラッシュ [E]シールドバッシュ [R]ポイズンストライク [F]瞬歩', 'system');
-    addMessage(this.state.messages, '[X]で周囲を調べる（イベント/隠し部屋/罠発見）', 'system');
     this.updateView();
   },
 
   startTutorial(chapterId) {
     Sound.stopBGM();
+    Music.stop();
     TutorialManager.reset();
 
     if (!TutorialManager.startChapter(chapterId)) {
@@ -144,6 +146,7 @@ const Game = {
     this.running = false;
     TutorialManager.reset();
     Sound.stopBGM();
+    Music.stop();
     UI.showTitle();
   },
 
@@ -161,6 +164,7 @@ const Game = {
     this.state.rooms = rooms;
     this.state.explored = createExplored();
     this.state.hiddenDoors = hiddenDoors || [];
+    this.state._discoveredTypes = {};
     this.state.chests = chests || [];
     this.state.merchant = merchant;
     this.state.isBossFloor = isBossFloor;
@@ -169,6 +173,12 @@ const Game = {
     this.state.mutation = mutation;
     this.state.roomEvents = roomEvents || [];
     this.state.poisonZones = poisonZones || [];
+
+    // Reset per-floor player hints
+    if (this.state.player) {
+      this.state.player._noStairsCount = 0;
+      this.state.player._lastRoomIdx = -1;
+    }
 
     if (floor === 1) {
       this.state.player = createPlayer(startPos.x, startPos.y);
@@ -266,6 +276,12 @@ const Game = {
       addMessage(this.state.messages, '過去の冒険者の影がさまよっている...', 'info');
     }
 
+    // Danmaku: floor entry + mutation
+    DanmakuManager.onEnterFloor(floor);
+    if (mutation !== MUTATION.NONE) {
+      setTimeout(() => DanmakuManager.onMutation(mutation), 2000);
+    }
+
     // Narrative events
     EventManager.trigger('on_floor_start', {}, this.state);
     if (isBossFloor) {
@@ -283,17 +299,66 @@ const Game = {
       if (inBounds(x, y)) explored[y][x] = true;
     }
 
-    TrapManager.detectTraps(this.state.traps, this.state.visible);
-
-    // Check if boss first seen
+    // Check if enemy first seen (discovery lines)
     for (const enemy of this.state.enemies) {
-      if (enemy.isBoss && enemy.hp > 0 && this.state.visible.has(`${enemy.x},${enemy.y}`)) {
+      if (enemy.hp > 0 && this.state.visible.has(`${enemy.x},${enemy.y}`)) {
         if (!enemy._announced) {
           enemy._announced = true;
-          addMessage(this.state.messages, `${enemy.name}が現れた！`, 'important');
-          Effects.screenShake(5);
-          Sound.startBossBGM();
+          if (enemy.isBoss) {
+            const lore = ENEMY_LORE[enemy.bossType || enemy.id];
+            if (lore && lore.discoverLines) {
+              addMessage(this.state.messages, randPick(lore.discoverLines), 'important');
+            } else {
+              addMessage(this.state.messages, `${enemy.name}が現れた！`, 'important');
+            }
+            Effects.screenShake(5);
+            Music.fadeToVolume(0, 1.5);
+            Sound.startBossBGM();
+          } else {
+            // Only show discover message for the first of each enemy type per floor
+            if (!this.state._discoveredTypes) this.state._discoveredTypes = {};
+            if (!this.state._discoveredTypes[enemy.id]) {
+              this.state._discoveredTypes[enemy.id] = true;
+              const lore = ENEMY_LORE[enemy.id];
+              if (lore && lore.discoverLines) {
+                addMessage(this.state.messages, randPick(lore.discoverLines), 'info');
+              }
+            }
+          }
         }
+      }
+    }
+
+    // Danmaku: check visible enemies, stairs, merchant, room events
+    for (const enemy of this.state.enemies) {
+      if (enemy.hp > 0 && this.state.visible.has(`${enemy.x},${enemy.y}`)) {
+        DanmakuManager.onSeeEnemy(enemy);
+      }
+    }
+    // Check stairs visibility
+    for (const key of this.state.visible) {
+      const [sx, sy] = key.split(',').map(Number);
+      if (inBounds(sx, sy) && this.state.map[sy][sx] === TILE.STAIRS_DOWN) {
+        DanmakuManager.onSeeStairs();
+        break;
+      }
+    }
+    // Check merchant visibility
+    if (this.state.merchant && this.state.visible.has(`${this.state.merchant.x},${this.state.merchant.y}`)) {
+      DanmakuManager.onSeeMerchant();
+    }
+    // Check room events visibility
+    if (this.state.roomEvents) {
+      for (const evt of this.state.roomEvents) {
+        if (!evt.used && this.state.visible.has(`${evt.x},${evt.y}`)) {
+          DanmakuManager.onSeeRoomEvent(evt.type);
+        }
+      }
+    }
+    // Check item visibility (food, potions, etc.)
+    for (const item of this.state.items) {
+      if (this.state.visible.has(`${item.x},${item.y}`)) {
+        DanmakuManager.onSeeItem(item);
       }
     }
 
@@ -306,6 +371,18 @@ const Game = {
 
     if (this.state.mode === 'shop') {
       this.handleShopAction(action);
+      return;
+    }
+
+    // Drop mode: Q was pressed, waiting for number key
+    if (this.state.mode === 'drop_select') {
+      if (action.type === 'use_item') {
+        this.handleDropItem(action.slot);
+      } else {
+        this.state.mode = 'play';
+        addMessage(this.state.messages, 'キャンセル。', 'system');
+        this.updateView();
+      }
       return;
     }
 
@@ -323,6 +400,11 @@ const Game = {
       case 'use_item':
         playerActed = this.handleUseItem(action.slot);
         break;
+      case 'drop_mode':
+        this.state.mode = 'drop_select';
+        addMessage(this.state.messages, 'どのアイテムを捨てる？(1-9で選択、他キーでキャンセル)', 'system');
+        this.updateView();
+        return;
       case 'descend':
         playerActed = this.handleDescend();
         break;
@@ -340,6 +422,9 @@ const Game = {
         break;
       case 'search':
         playerActed = this.handleSearch();
+        break;
+      case 'cast_magic':
+        playerActed = this.handleCastMagic();
         break;
       case 'hint':
         // Re-display tutorial hint
@@ -396,7 +481,58 @@ const Game = {
       const roomIdx = this._getPlayerRoomIndex();
       if (roomIdx !== -1 && roomIdx !== player._lastRoomIdx) {
         player._lastRoomIdx = roomIdx;
+        DanmakuManager.onEnterRoom(roomIdx, this.state);
         EventManager.trigger('on_enter_room', { roomIndex: roomIdx }, this.state);
+
+        // "No stairs here" hint on shallow floors
+        if (this.state.floor <= 3) {
+          const room = this.state.rooms[roomIdx];
+          const noStairsCount = player._noStairsCount || 0;
+          if (room && noStairsCount < 3) {
+            let hasStairs = false;
+            for (let ry = room.y; ry < room.y + room.h; ry++) {
+              for (let rx = room.x; rx < room.x + room.w; rx++) {
+                if (this.state.map[ry][rx] === TILE.STAIRS_DOWN) hasStairs = true;
+              }
+            }
+            if (!hasStairs) {
+              const noStairsLines = [
+                'この部屋にも階段は見当たらない。先へ進もう。',
+                '階段はない。別の部屋を探すしかない。',
+                'ここにも降り口はない...もっと奥か。',
+              ];
+              addMessage(messages, noStairsLines[noStairsCount] || noStairsLines[0], 'info');
+              player._noStairsCount = noStairsCount + 1;
+            }
+          }
+        }
+      }
+
+      // Long corridor detection
+      if (this.state.map[player.y][player.x] === TILE.CORRIDOR && !player._inCorridor) {
+        const len = this._measureCorridor(player.x, player.y);
+        if (len >= 6) {
+          player._inCorridor = true;
+          // Check if enemies are in this corridor
+          const hasEnemy = enemies.some(e =>
+            e.hp > 0 && this.state.map[e.y] && this.state.map[e.y][e.x] === TILE.CORRIDOR &&
+            manhattanDist(player.x, player.y, e.x, e.y) <= len
+          );
+          const lines = hasEnemy
+            ? [
+              '長い回廊だ。こんな狭い場所で敵に出くわしたら逃げ場がない。',
+              '細い通路が続いている。ここで囲まれたら避けようがない。',
+              '見通しの悪い長い廊下。背後にも気を配れ。',
+            ]
+            : [
+              '長い回廊が続いている。足音が反響する。',
+              '狭い通路が暗闇の奥へ伸びている。',
+              '天井が低い長い廊下だ。壁に松明の焦げ跡が残っている。',
+            ];
+          addMessage(messages, randPick(lines), 'info');
+        }
+      } else if (this.state.map[player.y][player.x] !== TILE.CORRIDOR) {
+        player._inCorridor = false;
       }
 
       // Check traps
@@ -430,6 +566,13 @@ const Game = {
           // Don't auto-enter shop
         }
       }
+    }
+
+    // Early guidance: show objective after ~10 steps on floor 1
+    if (!isTutorial && this.state.floor === 1 && player.turnCount === 10 && !player._objectiveShown) {
+      player._objectiveShown = true;
+      addMessage(messages, '目標: 階段を見つけて下の階へ降りること。まずは部屋を探索しよう。', 'system');
+      addMessage(messages, '通路の先に新しい部屋がある。階段は「>」の印だ。', 'system');
     }
 
     // Enemy turns
@@ -505,9 +648,13 @@ const Game = {
         if (quest) {
           addMessage(messages, `商人のクエスト: ${quest.desc} (報酬: ${quest.reward.gold}G)`, 'important');
         }
-      } else if (QuestManager.checkProgress(this.state)) {
-        // Complete quest
-        QuestManager.complete(player, messages);
+      } else if (QuestManager.activeQuest && !QuestManager.activeQuest.completed) {
+        // Check if quest can be completed when talking to merchant
+        // Reset notified flag so checkProgress works
+        QuestManager.activeQuest.notified = false;
+        if (QuestManager.checkProgress(this.state)) {
+          QuestManager.complete(player, messages);
+        }
       }
       EventManager.trigger('on_meet_merchant', { merchant: this.state.merchant }, this.state);
       UI.showShopUI(this.state.merchant, player, messages);
@@ -529,9 +676,43 @@ const Game = {
 
     // Move if walkable
     if (isWalkable(map[ny][nx])) {
+      // Record adjacent enemies before moving (for opportunity attacks)
+      const adjacentBefore = enemies.filter(e =>
+        e.hp > 0 && manhattanDist(player.x, player.y, e.x, e.y) === 1
+      );
+
       player.x = nx;
       player.y = ny;
       player.turnCount++;
+
+      // Opportunity attacks from enemies we moved away from
+      for (const e of adjacentBefore) {
+        if (e.hp <= 0) continue;
+        const newDist = manhattanDist(player.x, player.y, e.x, e.y);
+        if (newDist <= 1) continue; // Didn't move away from this enemy
+        const pursuitChance = e.pursuit || 0;
+        if (pursuitChance <= 0 || Math.random() >= pursuitChance) continue;
+
+        // Reduced damage opportunity attack
+        const mult = e.pursuitMult || 0.5;
+        const rawDmg = Math.max(1, e.atk - Math.floor(getPlayerDef(player) / 2));
+        const dmg = Math.max(1, Math.floor(rawDmg * mult));
+        player.hp -= dmg;
+
+        // Pursuit-specific message
+        const lore = ENEMY_LORE[e.bossType || e.id];
+        if (lore && lore.pursuitLines) {
+          addMessage(messages, `${randPick(lore.pursuitLines)} ${dmg}のダメージ！`, 'combat');
+        } else {
+          addMessage(messages, `${e.name}が背後から攻撃した！ ${dmg}のダメージ！`, 'combat');
+        }
+        Effects.spawnDamageNumber(player.x, player.y, dmg, false, false);
+        Effects.screenShake(1);
+        Sound.play('hit');
+
+        if (player.hp <= 0) break;
+      }
+
       // Small noise on move
       NoiseManager.propagate(player.x, player.y, NoiseManager.getActionNoise('move', player), enemies, player, messages);
       TutorialManager.handleEvent(this.state, 'player_moved', { x: nx, y: ny });
@@ -591,6 +772,21 @@ const Game = {
     return false;
   },
 
+  handleDropItem(slot) {
+    const { player, messages } = this.state;
+    this.state.mode = 'play';
+    if (slot < 0 || slot >= player.inventory.length) {
+      addMessage(messages, 'そのスロットにはアイテムがない。', 'system');
+      this.updateView();
+      return;
+    }
+    const item = player.inventory[slot];
+    const name = getItemDisplayName ? getItemDisplayName(item) : item.name;
+    player.inventory.splice(slot, 1);
+    addMessage(messages, `${name}を捨てた。`, 'item');
+    this.updateView();
+  },
+
   handleSkill(key) {
     const skill = SkillManager.getSkillByKey(key);
     if (!skill) return false;
@@ -600,6 +796,64 @@ const Game = {
       NoiseManager.propagate(this.state.player.x, this.state.player.y, NoiseManager.getActionNoise('skill', this.state.player), this.state.enemies, this.state.player, this.state.messages);
     }
     return acted;
+  },
+
+  handleCastMagic() {
+    const { player, map, enemies, messages } = this.state;
+    const magicDef = MAGIC_LEVEL_TABLE[player.magicLevel - 1];
+
+    if (player.magicStones < magicDef.cost) {
+      addMessage(messages, `魔法石が足りない！(必要: ${magicDef.cost}個, 所持: ${player.magicStones}個)`, 'system');
+      this.updateView();
+      return false;
+    }
+
+    player.magicStones -= magicDef.cost;
+
+    // Trace path in last move direction
+    const path = [];
+    let hitEnemy = null;
+    for (let i = 1; i <= magicDef.range; i++) {
+      const tx = player.x + player.lastDx * i;
+      const ty = player.y + player.lastDy * i;
+      if (!inBounds(tx, ty) || map[ty][tx] === TILE.WALL) break;
+      path.push({ x: tx, y: ty });
+      const enemy = enemies.find(e => e.hp > 0 && e.x === tx && e.y === ty);
+      if (enemy) { hitEnemy = enemy; break; }
+    }
+
+    Effects.spawnProjectile(path, '#ff8833');
+    Effects.flashScreen('#ff440030');
+    Sound.play('skill');
+
+    if (hitEnemy) {
+      const dmg = magicDef.damage;
+      hitEnemy.hp -= dmg;
+      addMessage(messages, `${magicDef.name}が${hitEnemy.name}に命中！(${dmg}ダメージ)`, 'combat');
+      Effects.spawnDamageNumber(hitEnemy.x, hitEnemy.y, dmg, false, false);
+      Effects.screenShake(2);
+
+      if (hitEnemy.hp <= 0) {
+        addMessage(messages, `${hitEnemy.name}を倒した！ (EXP+${hitEnemy.exp})`, 'combat');
+        player.killCount++;
+        player.gold += (hitEnemy.gold || 0);
+        if (hitEnemy.gold) addMessage(messages, `${hitEnemy.gold}Gを手に入れた。`, 'item');
+        player.killStreak = (player.killStreak || 0) + 1;
+        QuestManager.notifyKill(hitEnemy.name);
+        TutorialManager.handleEvent(this.state, 'enemy_killed', { id: hitEnemy.id });
+        const leveledUp = addExp(player, hitEnemy.exp);
+        if (leveledUp) {
+          addMessage(messages, `--- レベルアップ！ Lv.${player.level} ---`, 'level');
+          Sound.play('levelup');
+        }
+      }
+    } else {
+      const dest = path.length > 0 ? '' : '（壁に阻まれた）';
+      addMessage(messages, `${magicDef.name}！${dest}(石${magicDef.cost}消費)`, 'combat');
+    }
+
+    player.turnCount++;
+    return true;
   },
 
   handleSearch() {
@@ -627,7 +881,7 @@ const Game = {
     // Detect adjacent traps
     for (const trap of this.state.traps) {
       if (trap.detected || trap.triggered) continue;
-      if (manhattanDist(player.x, player.y, trap.x, trap.y) <= 1) {
+      if (manhattanDist(player.x, player.y, trap.x, trap.y) <= 5) {
         trap.detected = true;
         addMessage(messages, `${trap.name}を発見した！`, 'info');
         found = true;
@@ -690,6 +944,7 @@ const Game = {
     this.state.transitioning = true;
     Sound.play('stairs');
     Sound.stopBGM();
+    Music.regenerate();
 
     Effects.startFloorTransition(nextFloor, () => {
       this.generateFloor(nextFloor);
@@ -704,6 +959,49 @@ const Game = {
     const { player, messages, merchant } = this.state;
     if (!merchant) { this.state.mode = 'play'; return; }
 
+    // Sell mode: Q pressed in shop, waiting for number
+    if (this.state._shopSellMode) {
+      this.state._shopSellMode = false;
+      if (action.type === 'use_item') {
+        const slot = action.slot;
+        if (slot >= 0 && slot < player.inventory.length) {
+          const item = player.inventory[slot];
+          const sellPrice = Math.floor((item.price || 10) / 2);
+          const name = getItemDisplayName ? getItemDisplayName(item) : item.name;
+          player.inventory.splice(slot, 1);
+          player.gold += sellPrice;
+          addMessage(messages, `${name}を売った。(+${sellPrice}G)`, 'item');
+          Sound.play('buy');
+        } else {
+          addMessage(messages, 'そのスロットにはアイテムがない。', 'system');
+        }
+      } else {
+        addMessage(messages, 'キャンセル。', 'system');
+      }
+      UI.showShopUI(merchant, player, messages);
+      this.updateView();
+      return;
+    }
+
+    // Enter sell mode
+    if (action.type === 'drop_mode') {
+      if (player.inventory.length === 0) {
+        addMessage(messages, '売るアイテムがない。', 'system');
+      } else {
+        this.state._shopSellMode = true;
+        addMessage(messages, '--- 売却 ---', 'system');
+        player.inventory.forEach((item, i) => {
+          const name = getItemDisplayName ? getItemDisplayName(item) : item.name;
+          const sellPrice = Math.floor((item.price || 10) / 2);
+          addMessage(messages, `[${i + 1}] ${name} → ${sellPrice}G`, 'item');
+        });
+        addMessage(messages, '番号キーで売却、他のキーでキャンセル', 'system');
+      }
+      this.updateView();
+      return;
+    }
+
+    // Buy items
     if (action.type === 'use_item') {
       const shopIdx = action.slot;
       if (shopIdx >= 0 && shopIdx < merchant.shopItems.length) {
@@ -716,7 +1014,6 @@ const Game = {
             const boughtItem = createItem(player.x, player.y, si.item, si.item.rarity);
             player.inventory.push(boughtItem);
             addMessage(messages, `${si.item.name}を購入した。(-${si.price}G)`, 'item');
-            // Merchant buy line
             if (merchant.buyLines && merchant.buyLines.length > 0) {
               addMessage(messages, `「${randPick(merchant.buyLines)}」`, 'info');
             }
@@ -743,6 +1040,7 @@ const Game = {
     if (boss && boss.hp <= 0) {
       this.state.bossDefeated = true;
       Sound.stopBGM();
+      Music.fadeToVolume(1, 3);
 
       this.state.map[boss.y][boss.x] = TILE.STAIRS_DOWN;
 
@@ -801,6 +1099,7 @@ const Game = {
     this.state.gameOver = true;
     this.running = false;
     Sound.stopBGM();
+    Music.stop();
     Sound.play('death');
     // Game over lore
     for (const line of GAMEOVER_TEXT) {
@@ -825,10 +1124,32 @@ const Game = {
     return -1;
   },
 
+  // Measure corridor length from a point by flood-filling connected corridor tiles
+  _measureCorridor(sx, sy) {
+    const map = this.state.map;
+    const visited = new Set();
+    const queue = [{ x: sx, y: sy }];
+    visited.add(`${sx},${sy}`);
+    while (queue.length > 0) {
+      const { x, y } = queue.shift();
+      for (const dir of CARDINAL_DIRS) {
+        const nx = x + dir.x;
+        const ny = y + dir.y;
+        const key = `${nx},${ny}`;
+        if (!visited.has(key) && inBounds(nx, ny) && map[ny][nx] === TILE.CORRIDOR) {
+          visited.add(key);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+    }
+    return visited.size;
+  },
+
   victory() {
     this.state.gameOver = true;
     this.running = false;
     Sound.stopBGM();
+    Music.stop();
     Sound.play('levelup');
     // Victory lore
     for (const line of ENDING_TEXT.long) {

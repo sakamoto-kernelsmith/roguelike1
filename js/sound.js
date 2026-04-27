@@ -18,6 +18,7 @@ const Sound = {
       this.bgmGain = this.ctx.createGain();
       this.bgmGain.gain.value = 0;
       this.bgmGain.connect(this.masterGain);
+      Music.init(this.ctx, this.masterGain);
     } catch (e) {
       this.enabled = false;
     }

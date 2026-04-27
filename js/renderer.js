@@ -2,15 +2,91 @@
 // Renderer - Canvas-based tile rendering (with Mutations, Events, Prefixes)
 // =============================================================================
 
+const SPRITE_COLS = 8;
+const SPRITE_ROWS = 7;
+
+// [col, row] positions in sprites.png
+const SPRITE_MAP = {
+  // Terrain (row 0)
+  tile_floor:        [0, 0],
+  tile_wall:         [1, 0],
+  tile_corridor:     [2, 0],
+  tile_door:         [3, 0],
+  tile_stairs_down:  [4, 0],
+  tile_stairs_up:    [5, 0],
+  // Player (row 1)
+  player:            [0, 1],
+  // Enemies (rows 2-3)
+  slime:             [0, 2],
+  bat:               [1, 2],
+  rat:               [2, 2],
+  goblin:            [3, 2],
+  skeleton:          [4, 2],
+  orc:               [5, 2],
+  lizardman:         [6, 2],
+  ghost:             [7, 2],
+  troll:             [0, 3],
+  dragon:            [1, 3],
+  minotaur:          [2, 3],
+  lich:              [3, 3],
+  // Items by loreKey (rows 4-5)
+  heal_potion:       [0, 4],
+  big_heal_potion:   [1, 4],
+  scroll_map:        [2, 4],
+  poison_scroll:     [3, 4],
+  weapon_dagger:     [4, 4],
+  weapon_longsword:  [5, 4],
+  weapon_greatsword: [6, 4],
+  weapon_flame:      [7, 4],
+  weapon_vampiric:   [0, 5],
+  weapon_magic:      [1, 5],
+  armor_leather:     [2, 5],
+  armor_chain:       [2, 5],
+  armor_plate:       [2, 5],
+  armor_evasion:     [2, 5],
+  armor_counter:     [2, 5],
+  armor_stealth:     [2, 5],
+  armor_magic:       [2, 5],
+  food_bread:        [3, 5],
+  food_meat:         [3, 5],
+  food_feast:        [3, 5],
+  magic_stone:       [4, 5],
+  magic_crystal:     [4, 5],
+  // Objects (row 6)
+  chest:             [1, 6],
+  trap_spike:        [2, 6],
+  trap_poison_gas:   [3, 6],
+  trap_teleport:     [4, 6],
+  trap_pit:          [4, 6],
+  trap_alarm:        [4, 6],
+  altar:             [5, 6],
+  fountain:          [6, 6],
+  merchant:          [7, 6],
+  wounded_merchant:  [7, 6],
+};
+
+const TILE_SPRITE_KEY = {
+  [1]: 'tile_floor',
+  [2]: 'tile_wall',
+  [3]: 'tile_corridor',
+  [4]: 'tile_door',
+  [5]: 'tile_stairs_down',
+  [6]: 'tile_stairs_up',
+};
+
 const Renderer = {
   canvas: null,
   ctx: null,
   minimapCanvas: null,
   minimapCtx: null,
-  tileSize: 20,
+  tileSize: 40,
   font: null,
   viewCols: 0,
   viewRows: 0,
+  spriteSheet: null,
+  spriteLoaded: false,
+  spriteSW: 0,
+  spriteSH: 0,
 
   init() {
     this.canvas = document.getElementById('game-canvas');
@@ -20,6 +96,18 @@ const Renderer = {
 
     this.resize();
     this.font = `${this.tileSize}px "Courier New", "MS Gothic", monospace`;
+    this.loadSprites();
+  },
+
+  loadSprites() {
+    const img = new Image();
+    img.onload = () => {
+      this.spriteSheet = img;
+      this.spriteSW = img.width / SPRITE_COLS;
+      this.spriteSH = img.height / SPRITE_ROWS;
+      this.spriteLoaded = true;
+    };
+    img.src = 'sprites.png';
   },
 
   resize() {
@@ -53,6 +141,24 @@ const Renderer = {
     return { offsetX, offsetY };
   },
 
+  drawSprite(ctx, col, row, px, py, alpha) {
+    if (!this.spriteLoaded) return false;
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(
+      this.spriteSheet,
+      col * this.spriteSW, row * this.spriteSH, this.spriteSW, this.spriteSH,
+      px, py, this.tileSize, this.tileSize
+    );
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
+    return true;
+  },
+
+  drawSpriteByKey(ctx, key, px, py, alpha) {
+    const pos = SPRITE_MAP[key];
+    if (!pos) return false;
+    return this.drawSprite(ctx, pos[0], pos[1], px, py, alpha);
+  },
+
   render(state) {
     const { map, player, enemies, items, visible, explored, traps, chests, merchant, roomEvents, mutation, poisonZones, rooms } = state;
     const ctx = this.ctx;
@@ -79,14 +185,22 @@ const Renderer = {
         if (!isVisible && !isExplored) continue;
 
         const tile = map[my][mx];
-        const [ch, fg, bg] = TILE_DISPLAY[tile] || TILE_DISPLAY[TILE.VOID];
+        if (tile === 0) continue; // VOID stays black
+
         const px = vx * ts;
         const py = vy * ts;
+        const alpha = isVisible ? 1 : 0.3;
+        const spriteKey = TILE_SPRITE_KEY[tile];
 
-        ctx.fillStyle = isVisible ? bg : this.darken(bg, 0.4);
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = isVisible ? fg : this.darken(fg, 0.4);
-        ctx.fillText(ch, px + ts / 2, py + 2);
+        if (spriteKey && this.spriteLoaded) {
+          this.drawSpriteByKey(ctx, spriteKey, px, py, alpha);
+        } else {
+          const [ch, fg, bg] = TILE_DISPLAY[tile] || TILE_DISPLAY[0];
+          ctx.fillStyle = isVisible ? bg : this.darken(bg, 0.4);
+          ctx.fillRect(px, py, ts, ts);
+          ctx.fillStyle = isVisible ? fg : this.darken(fg, 0.4);
+          ctx.fillText(ch, px + ts / 2, py + 2);
+        }
 
         // Poison fog overlay
         if (isVisible && mutation === MUTATION.POISON_FOG && poisonZones && rooms) {
@@ -98,7 +212,7 @@ const Renderer = {
       }
     }
 
-    // Tutorial highlights (pulsing target indicator + danger zones)
+    // Tutorial highlights
     if (typeof TutorialManager !== 'undefined' && TutorialManager.active) {
       const pulse = 0.25 + 0.2 * Math.sin(Date.now() / 300);
       const highlights = TutorialManager.getHighlightPositions();
@@ -130,10 +244,12 @@ const Renderer = {
         const sx = (trap.x - offsetX) * ts;
         const sy = (trap.y - offsetY) * ts;
         if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
-        ctx.fillStyle = '#111';
-        ctx.fillRect(sx, sy, ts, ts);
-        ctx.fillStyle = trap.color;
-        ctx.fillText(trap.ch, sx + ts / 2, sy + 2);
+        if (!this.drawSpriteByKey(ctx, `trap_${trap.type}`, sx, sy)) {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(sx, sy, ts, ts);
+          ctx.fillStyle = trap.color;
+          ctx.fillText(trap.ch, sx + ts / 2, sy + 2);
+        }
       }
     }
 
@@ -145,10 +261,12 @@ const Renderer = {
         const sx = (evt.x - offsetX) * ts;
         const sy = (evt.y - offsetY) * ts;
         if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
-        ctx.fillStyle = '#111';
-        ctx.fillRect(sx, sy, ts, ts);
-        ctx.fillStyle = evt.color;
-        ctx.fillText(evt.ch, sx + ts / 2, sy + 2);
+        if (!this.drawSpriteByKey(ctx, evt.type, sx, sy)) {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(sx, sy, ts, ts);
+          ctx.fillStyle = evt.color;
+          ctx.fillText(evt.ch, sx + ts / 2, sy + 2);
+        }
       }
     }
 
@@ -159,10 +277,12 @@ const Renderer = {
         const sx = (chest.x - offsetX) * ts;
         const sy = (chest.y - offsetY) * ts;
         if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
-        ctx.fillStyle = '#111';
-        ctx.fillRect(sx, sy, ts, ts);
-        ctx.fillStyle = chest.color;
-        ctx.fillText(chest.ch, sx + ts / 2, sy + 2);
+        if (!this.drawSpriteByKey(ctx, 'chest', sx, sy)) {
+          ctx.fillStyle = '#111';
+          ctx.fillRect(sx, sy, ts, ts);
+          ctx.fillStyle = chest.color;
+          ctx.fillText(chest.ch, sx + ts / 2, sy + 2);
+        }
       }
     }
 
@@ -172,17 +292,20 @@ const Renderer = {
       const sx = (item.x - offsetX) * ts;
       const sy = (item.y - offsetY) * ts;
       if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
-      ctx.fillStyle = '#111';
-      ctx.fillRect(sx, sy, ts, ts);
-      ctx.fillStyle = RARITY_COLORS[item.rarity] || item.color;
-      ctx.fillText(item.ch, sx + ts / 2, sy + 2);
+      if (!this.drawSpriteByKey(ctx, item.loreKey, sx, sy) &&
+          !this.drawSpriteByKey(ctx, item.type, sx, sy)) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = RARITY_COLORS[item.rarity] || item.color;
+        ctx.fillText(item.ch, sx + ts / 2, sy + 2);
+      }
     }
 
     // Draw merchant
-    if (merchant) {
-      if (visible.has(`${merchant.x},${merchant.y}`)) {
-        const sx = (merchant.x - offsetX) * ts;
-        const sy = (merchant.y - offsetY) * ts;
+    if (merchant && visible.has(`${merchant.x},${merchant.y}`)) {
+      const sx = (merchant.x - offsetX) * ts;
+      const sy = (merchant.y - offsetY) * ts;
+      if (!this.drawSpriteByKey(ctx, 'merchant', sx, sy)) {
         ctx.fillStyle = '#111';
         ctx.fillRect(sx, sy, ts, ts);
         ctx.fillStyle = merchant.color;
@@ -198,10 +321,13 @@ const Renderer = {
       const sy = (enemy.y - offsetY) * ts;
       if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
 
-      ctx.fillStyle = '#111';
-      ctx.fillRect(sx, sy, ts, ts);
-      ctx.fillStyle = enemy.color;
-      ctx.fillText(enemy.ch, sx + ts / 2, sy + 2);
+      const enemyKey = enemy.bossType || enemy.id;
+      if (!this.drawSpriteByKey(ctx, enemyKey, sx, sy)) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = enemy.color;
+        ctx.fillText(enemy.ch, sx + ts / 2, sy + 2);
+      }
 
       // HP bar
       if (enemy.hp < enemy.maxHp) {
@@ -232,7 +358,6 @@ const Renderer = {
         ctx.font = this.font;
       }
 
-      // Boss HP bar
       if (enemy.isBoss) {
         this.renderBossBar(ctx, enemy);
       }
@@ -242,12 +367,14 @@ const Renderer = {
     {
       const sx = (player.x - offsetX) * ts;
       const sy = (player.y - offsetY) * ts;
-      ctx.fillStyle = '#222';
-      ctx.fillRect(sx, sy, ts, ts);
-      ctx.fillStyle = player.color;
-      ctx.font = `bold ${this.font}`;
-      ctx.fillText(player.ch, sx + ts / 2, sy + 2);
-      ctx.font = this.font;
+      if (!this.drawSpriteByKey(ctx, 'player', sx, sy)) {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillStyle = player.color;
+        ctx.font = `bold ${this.font}`;
+        ctx.fillText(player.ch, sx + ts / 2, sy + 2);
+        ctx.font = this.font;
+      }
 
       const pIcons = StatusManager.getDisplayIcons(player);
       if (pIcons.length > 0) {
@@ -280,7 +407,6 @@ const Renderer = {
     ctx.strokeStyle = '#666';
     ctx.strokeRect(bx, by, barW, barH);
 
-    // Phase indicators
     const phase = boss.bossPhase || 1;
     ctx.fillStyle = '#fff';
     ctx.font = '10px monospace';
@@ -305,9 +431,9 @@ const Renderer = {
       for (let x = 0; x < MAP_WIDTH; x++) {
         if (!explored[y][x]) continue;
         const tile = map[y][x];
-        if (tile === TILE.WALL || tile === TILE.VOID) continue;
+        if (tile === 0 || tile === 2) continue; // VOID or WALL
         const isVis = visible.has(`${x},${y}`);
-        if (tile === TILE.STAIRS_DOWN) {
+        if (tile === 5) {
           ctx.fillStyle = isVis ? '#00ccff' : '#004466';
         } else {
           ctx.fillStyle = isVis ? '#334' : '#1a1a22';
@@ -316,20 +442,17 @@ const Renderer = {
       }
     }
 
-    // Enemy dots
     for (const enemy of enemies) {
       if (enemy.hp <= 0 || !visible.has(`${enemy.x},${enemy.y}`)) continue;
       ctx.fillStyle = enemy.isBoss ? '#ff4444' : (enemy.prefix ? enemy.prefix.color : '#e04040');
       ctx.fillRect(enemy.x * tileW, enemy.y * tileH, tileW + 1, tileH + 1);
     }
 
-    // Merchant
     if (merchant && visible.has(`${merchant.x},${merchant.y}`)) {
       ctx.fillStyle = '#ffdd44';
       ctx.fillRect(merchant.x * tileW, merchant.y * tileH, tileW + 1, tileH + 1);
     }
 
-    // Room events
     if (roomEvents) {
       for (const evt of roomEvents) {
         if (evt.used) continue;
@@ -339,7 +462,6 @@ const Renderer = {
       }
     }
 
-    // Player
     ctx.fillStyle = '#fff';
     ctx.fillRect(player.x * tileW - 0.5, player.y * tileH - 0.5, tileW + 1, tileH + 1);
   },

@@ -124,12 +124,9 @@ body {
   background: linear-gradient(to bottom, #40a040, #207020);
 }
 
-/* Skill Bar */
+/* Skill Bar (hidden) */
 #skill-bar {
-  margin-top: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: none;
 }
 
 .skill-slot {
@@ -210,8 +207,8 @@ body {
   border-top: 1px solid #333;
   padding: 6px 10px;
   overflow-y: auto;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 #messages {
@@ -531,4 +528,37 @@ body {
 
 #tutorial-complete-screen button {
   margin: 4px;
+}
+
+/* Danmaku (Niconico-style flowing comments) */
+#danmaku-container {
+  position: absolute;
+  top: 32px; /* below header */
+  left: 0;
+  width: 778px; /* canvas area width (960 - 180 sidebar - 2 border) */
+  height: 528px; /* canvas area height */
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.danmaku-comment {
+  position: absolute;
+  white-space: nowrap;
+  font-family: 'MS Gothic', 'Courier New', monospace;
+  font-weight: bold;
+  letter-spacing: 1px;
+  left: 100%;
+  animation: danmaku-flow linear forwards;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes danmaku-flow {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-100% - 800px));
+  }
 }

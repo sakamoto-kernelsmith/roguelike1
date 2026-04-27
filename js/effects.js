@@ -10,6 +10,7 @@ const Effects = {
   flashColor: null,
   flashDuration: 0,
   floorTransition: null,
+  projectile: null,
   animating: false,
 
   init() {
@@ -20,6 +21,7 @@ const Effects = {
     this.flashColor = null;
     this.flashDuration = 0;
     this.floorTransition = null;
+    this.projectile = null;
     this.startLoop();
   },
 
@@ -39,7 +41,8 @@ const Effects = {
            this.particles.length > 0 ||
            this.shakeDuration > 0 ||
            this.flashDuration > 0 ||
-           this.floorTransition !== null;
+           this.floorTransition !== null ||
+           this.projectile !== null;
   },
 
   update(dt) {
@@ -96,6 +99,19 @@ const Effects = {
       }
     }
 
+    // Projectile
+    if (this.projectile) {
+      this.projectile.age += dt;
+      if (this.projectile.age >= this.projectile.lifetime) {
+        this.projectile = null;
+      }
+    }
+
+    // Danmaku idle tick
+    if (typeof DanmakuManager !== 'undefined') {
+      DanmakuManager.tickIdle(dt);
+    }
+
     // Re-render if effects active
     if (this.hasActive() && typeof Game !== 'undefined' && Game.state && Renderer.ctx) {
       if (!this.floorTransition || this.floorTransition.phase !== 'fadeout') {
@@ -119,21 +135,12 @@ const Effects = {
   },
 
   spawnParticles(tileX, tileY, color, count) {
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const speed = 20 + Math.random() * 40;
-      this.particles.push({
-        x: tileX,
-        y: tileY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        color,
-        size: 2 + Math.random() * 3,
-        age: 0,
-        lifetime: 400 + Math.random() * 300,
-        alpha: 1,
-      });
-    }
+    // Disabled: particle scatter effect removed for calmer visuals
+  },
+
+  spawnProjectile(path, color) {
+    if (path.length === 0) return;
+    this.projectile = { path, color, age: 0, lifetime: Math.max(200, path.length * 60) };
   },
 
   screenShake(amount) {
@@ -187,6 +194,28 @@ const Effects = {
       ctx.arc(sx, sy, p.size, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+    }
+
+    // Projectile
+    if (this.projectile) {
+      const proj = this.projectile;
+      const progress = proj.age / proj.lifetime;
+      const currentIdx = Math.floor(progress * proj.path.length);
+      for (let i = 0; i < proj.path.length; i++) {
+        const fade = 1 - (currentIdx - i) / 4;
+        if (fade <= 0) continue;
+        const tile = proj.path[i];
+        const sx = (tile.x - offsetX) * ts + ts / 2;
+        const sy = (tile.y - offsetY) * ts + ts / 2;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, fade);
+        ctx.fillStyle = proj.color;
+        ctx.font = `bold ${ts}px "Courier New", monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('*', sx, sy);
+        ctx.restore();
+      }
     }
 
     // Screen flash

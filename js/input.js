@@ -31,14 +31,20 @@ const Input = {
       // Wait
       case ' ': action = { type: 'wait' }; break;
 
-      // Skills
-      case 'q': case 'Q': action = { type: 'skill', key: 'q' }; break;
-      case 'e': case 'E': action = { type: 'skill', key: 'e' }; break;
-      case 'r': case 'R': action = { type: 'skill', key: 'r' }; break;
-      case 'f': case 'F': action = { type: 'skill', key: 'f' }; break;
+      // Skills (disabled)
+      // case 'q': case 'Q': action = { type: 'skill', key: 'q' }; break;
+      // case 'e': case 'E': action = { type: 'skill', key: 'e' }; break;
+      // case 'r': case 'R': action = { type: 'skill', key: 'r' }; break;
+      // case 'f': case 'F': action = { type: 'skill', key: 'f' }; break;
+
+      // Drop item (Q + number)
+      case 'q': case 'Q': action = { type: 'drop_mode' }; break;
 
       // Search
       case 'x': case 'X': action = { type: 'search' }; break;
+
+      // Cast magic
+      case 'm': case 'M': action = { type: 'cast_magic' }; break;
 
       // Hint re-display (tutorial)
       case 'h': case 'H': action = { type: 'hint' }; break;
