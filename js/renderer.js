@@ -84,9 +84,15 @@ const Renderer = {
   viewCols: 0,
   viewRows: 0,
   spriteSheet: null,
+  spriteSheet2: null,
   spriteLoaded: false,
+  spriteLoaded2: false,
   spriteSW: 0,
   spriteSH: 0,
+  animTime: 0,
+  animFPS: 4,
+  _lastState: null,
+  _prevTimestamp: 0,
 
   init() {
     this.canvas = document.getElementById('game-canvas');
@@ -97,6 +103,26 @@ const Renderer = {
     this.resize();
     this.font = `${this.tileSize}px "Courier New", "MS Gothic", monospace`;
     this.loadSprites();
+    this.startAnimLoop();
+  },
+
+  setGameState(state) {
+    this._lastState = state;
+  },
+
+  startAnimLoop() {
+    const loop = (timestamp) => {
+      requestAnimationFrame(loop);
+      if (!this._lastState) {
+        this._prevTimestamp = timestamp;
+        return;
+      }
+      const delta = Math.min(timestamp - this._prevTimestamp, 50);
+      this._prevTimestamp = timestamp;
+      this.animTime += delta / 1000;
+      this.render(this._lastState);
+    };
+    requestAnimationFrame(loop);
   },
 
   loadSprites() {
@@ -108,6 +134,13 @@ const Renderer = {
       this.spriteLoaded = true;
     };
     img.src = 'sprites.png';
+
+    const img2 = new Image();
+    img2.onload = () => {
+      this.spriteSheet2 = img2;
+      this.spriteLoaded2 = true;
+    };
+    img2.src = 'sprites2.png';
   },
 
   resize() {
@@ -141,22 +174,27 @@ const Renderer = {
     return { offsetX, offsetY };
   },
 
-  drawSprite(ctx, col, row, px, py, alpha) {
+  drawSprite(ctx, col, row, px, py, alpha, dy = 0, animPhase = -1) {
     if (!this.spriteLoaded) return false;
+    let sheet = this.spriteSheet;
+    if (animPhase >= 0 && this.spriteLoaded2) {
+      const frame = Math.floor(this.animTime * this.animFPS + animPhase) % 2;
+      if (frame === 1) sheet = this.spriteSheet2;
+    }
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
     ctx.drawImage(
-      this.spriteSheet,
+      sheet,
       col * this.spriteSW, row * this.spriteSH, this.spriteSW, this.spriteSH,
-      px, py, this.tileSize, this.tileSize
+      px, py + dy, this.tileSize, this.tileSize
     );
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
     return true;
   },
 
-  drawSpriteByKey(ctx, key, px, py, alpha) {
+  drawSpriteByKey(ctx, key, px, py, alpha, dy = 0, animPhase = -1) {
     const pos = SPRITE_MAP[key];
     if (!pos) return false;
-    return this.drawSprite(ctx, pos[0], pos[1], px, py, alpha);
+    return this.drawSprite(ctx, pos[0], pos[1], px, py, alpha, dy, animPhase);
   },
 
   render(state) {
@@ -321,13 +359,21 @@ const Renderer = {
       const sy = (enemy.y - offsetY) * ts;
       if (sx < 0 || sy < 0 || sx >= this.canvas.width || sy >= this.canvas.height) continue;
 
+      const phase = enemy.x * 1.3 + enemy.y * 0.7;
+      const bobAmp = enemy.isBoss ? 3 : 2;
+      const bobDy = Math.round(Math.sin(this.animTime * 2.0 + phase) * bobAmp);
+      const isGhost = enemy.id === 'ghost';
+      const drawAlpha = isGhost ? 0.45 + 0.45 * Math.abs(Math.sin(this.animTime * 2.5 + phase)) : 1;
+
+      if (drawAlpha !== 1) ctx.globalAlpha = drawAlpha;
       const enemyKey = enemy.bossType || enemy.id;
-      if (!this.drawSpriteByKey(ctx, enemyKey, sx, sy)) {
+      if (!this.drawSpriteByKey(ctx, enemyKey, sx, sy, undefined, bobDy, phase)) {
         ctx.fillStyle = '#111';
-        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillRect(sx, sy + bobDy, ts, ts);
         ctx.fillStyle = enemy.color;
-        ctx.fillText(enemy.ch, sx + ts / 2, sy + 2);
+        ctx.fillText(enemy.ch, sx + ts / 2, sy + bobDy + 2);
       }
+      if (drawAlpha !== 1) ctx.globalAlpha = 1;
 
       // HP bar
       if (enemy.hp < enemy.maxHp) {
@@ -367,12 +413,13 @@ const Renderer = {
     {
       const sx = (player.x - offsetX) * ts;
       const sy = (player.y - offsetY) * ts;
-      if (!this.drawSpriteByKey(ctx, 'player', sx, sy)) {
+      const playerBobDy = Math.round(Math.sin(this.animTime * 1.5) * 2);
+      if (!this.drawSpriteByKey(ctx, 'player', sx, sy, undefined, playerBobDy, 0)) {
         ctx.fillStyle = '#222';
-        ctx.fillRect(sx, sy, ts, ts);
+        ctx.fillRect(sx, sy + playerBobDy, ts, ts);
         ctx.fillStyle = player.color;
         ctx.font = `bold ${this.font}`;
-        ctx.fillText(player.ch, sx + ts / 2, sy + 2);
+        ctx.fillText(player.ch, sx + ts / 2, sy + playerBobDy + 2);
         ctx.font = this.font;
       }
 

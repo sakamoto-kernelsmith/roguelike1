@@ -362,7 +362,7 @@ const Game = {
       }
     }
 
-    Renderer.render(this.state);
+    Renderer.setGameState(this.state);
     UI.update(this.state);
   },
 
